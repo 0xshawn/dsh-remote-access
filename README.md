@@ -63,6 +63,8 @@ DSH_REMOTE_ACCESS_TRUSTED_HOSTS="dsh.example.com" \
 dsh web --host 127.0.0.1 --port 3080 --no-open
 ```
 
+Malformed authorities (a scheme, path, userinfo, or zero-padded port) abort boot with the upstream validation error instead of being silently ignored.
+
 ### Plugin config
 
 Override the `dsh-remote-access` row in the profile patch (`$DSH_HOME/profiles/web/cordis.patch.yml`) for per-profile values:
@@ -104,7 +106,7 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
 
 ## Security
 
-- **The launch token is the credential.** Anyone holding the printed `?token=` URL can obtain a session cookie and full owner access. Share it deliberately; rotate by changing `DSH_WEB_TOKEN` and restarting. A pinned token is long-lived — never commit it.
+- **The launch token is the credential.** Anyone holding the printed `?token=` URL can obtain a session cookie and full owner access. Share it deliberately. A pinned token is a long-lived credential — never commit it. Changing `DSH_WEB_TOKEN` and restarting invalidates the old URL but does **not** revoke cookies already issued (they live for `cookieMaxAgeDays`, 30 days by default); clear the site's cookies, or remove the browser-session credential record and restart, to revoke them.
 - **Trusted hosts are not authentication.** They only admit the authority to the Host/Origin fence; the signed session cookie still gates every RPC. Never expose the listener port to an untrusted network without TLS and a proxy you control.
 - **Loopback parity is a privilege decision.** On dsh 0.2.0 it makes settings host-backed for authenticated remote browsers; on every version it exposes local-only UI affordances such as **Open configuration file**, which opens the settings document in the *host's* editor. Remote browsers already hold owner credentials, but operators who want the stock least-privilege view can set `loopback: false`.
 - **Plain HTTP leaks the token.** Terminate TLS at the proxy or with `--tls-cert/--tls-key`; the upstream guide covers cookie `Secure` behaviour.

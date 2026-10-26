@@ -63,6 +63,8 @@ DSH_REMOTE_ACCESS_TRUSTED_HOSTS="dsh.example.com" \
 dsh web --host 127.0.0.1 --port 3080 --no-open
 ```
 
+非法权威（带 scheme、路径、userinfo 或补零端口）会在启动时以上游的校验错误中止，而不是被静默忽略。
+
 ### 插件配置
 
 需要按 profile 覆盖时，编辑 `$DSH_HOME/profiles/web/cordis.patch.yml` 中的 `dsh-remote-access` 行：
@@ -104,7 +106,7 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 
 ## 安全说明
 
-- **启动令牌就是凭据。** 持有打印出来的 `?token=` URL 即可换取会话 Cookie 并获得完整 owner 权限。请谨慎分发；修改 `DSH_WEB_TOKEN` 并重启即可轮换。固定令牌是长期凭据，绝不能提交到仓库。
+- **启动令牌就是凭据。** 持有打印出来的 `?token=` URL 即可换取会话 Cookie 并获得完整 owner 权限。请谨慎分发；固定令牌是长期凭据，绝不能提交到仓库。修改 `DSH_WEB_TOKEN` 并重启只会让旧 URL 失效，**不会**吊销已经签发的 Cookie（默认有效期 `cookieMaxAgeDays` 为 30 天）；要真正吊销，请清除该站点的 Cookie，或删除 browser-session 凭据记录后重启。
 - **信任权威不等于认证。** 它只让该权威通过 Host/Origin 围栏；签名会话 Cookie 仍把守每个 RPC。不要把监听端口暴露到不受信任的网络；需要时用 TLS 和自控代理。
 - **回环视图是权限决定。** dsh 0.2.0 下它让已认证远程浏览器的设置改为写入宿主机；所有版本下它会暴露仅限本机的界面操作，例如 **Open configuration file** 会在**宿主机**的编辑器里打开设置文件。远程浏览器本来就持有 owner 凭据；希望保持上游最小权限视图的运维方可以设置 `loopback: false`。
 - **纯 HTTP 会泄露令牌。** 在代理侧或通过 `--tls-cert/--tls-key` 终结 TLS；Cookie 的 `Secure` 行为见上游文档。
