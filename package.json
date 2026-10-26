@@ -1,0 +1,56 @@
+{
+  "name": "dsh-remote-access",
+  "version": "0.1.0",
+  "description": "Serve the DeepSeek Harness Web UI through a non-localhost authority: declarative /api trusted hosts, loopback page parity, and a pinned launch token, without patching the installed dsh.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "bundle",
+    "web",
+    "remote-access",
+    "reverse-proxy",
+    "trusted-host",
+    "web-token"
+  ],
+  "license": "MIT",
+  "author": "shawn (https://github.com/0xshawn)",
+  "homepage": "https://github.com/0xshawn/dsh-remote-access#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xshawn/dsh-remote-access.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0xshawn/dsh-remote-access/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.0-0 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.18.5"
+  }
+}
