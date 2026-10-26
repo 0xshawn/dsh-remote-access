@@ -94,7 +94,7 @@ See upstream [Publish the Web UI behind a reverse proxy](https://github.com/deep
 
 The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deepseek-ai/dsh-base` + `@deepseek-ai/dsh-web-app`, and two seams are used.
 
-1. **Trusted hosts — patch layer.** The `connection` row's `trustedHosts` gets the environment list concatenated onto the invocation list. The expression reads `ctx.get('webStartup')` (dsh 0.2.1) or `ctx.get('webRuntime')` (dsh 0.2.0), so one patch covers both layouts. The Host/Origin fence and the `allowsRemoteAuthorities` classification are then upstream's own.
+1. **Trusted hosts — patch layer.** The `connection` row's `trustedHosts` gets the environment list concatenated onto the invocation list. The expression reads `ctx.get('webRuntime')` (dsh 0.2.0, which already carries the bind-derived LAN literals and CLI extras) or `ctx.get('webStartup')` (dsh 0.2.1); 0.2.0 provides both services, so runtime must win to keep a wildcard bind's LAN authorities. One patch covers both layouts. The Host/Origin fence and the `allowsRemoteAuthorities` classification are then upstream's own.
 2. **Loopback view — index injection.** The host plugin listens to `webserver/index-inject` and adds one inline classic script to the served index:
 
    ```js

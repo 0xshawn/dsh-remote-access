@@ -94,7 +94,7 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 
 本包是一个 dsh **bundle**：`cordis.patch.yml` 是叠加在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之上的 patch 层，用到两个扩展点。
 
-1. **信任权威 —— patch 层。** 在 `connection` 行的 `trustedHosts` 上把环境变量列表拼接到命令行列表之后。表达式读取 0.2.1 的 `ctx.get('webStartup')` 或 0.2.0 的 `ctx.get('webRuntime')`，一份 patch 覆盖两种布局。Host/Origin 围栏与 `allowsRemoteAuthorities` 判定都交回上游实现。
+1. **信任权威 —— patch 层。** 在 `connection` 行的 `trustedHosts` 上把环境变量列表拼接到命令行列表之后。表达式优先读取 0.2.0 的 `ctx.get('webRuntime')`（其中已包含通配绑定推导出的 LAN 字面量与命令行附加项），再回退到 0.2.1 的 `ctx.get('webStartup')`；0.2.0 同时提供这两个服务，因此必须优先 runtime，否则会丢掉通配绑定的 LAN 权威。一份 patch 覆盖两种布局。Host/Origin 围栏与 `allowsRemoteAuthorities` 判定都交回上游实现。
 2. **回环视图 —— index 注入。** 宿主插件监听 `webserver/index-inject`，向返回的 index 注入一段内联经典脚本：
 
    ```js

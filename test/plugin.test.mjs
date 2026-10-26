@@ -126,3 +126,47 @@ test('bundle patch declares deployment authorities for the /api fence', async ()
   assert.match(patch, /ctx\.get\('webRuntime'\)/u)
   assert.match(patch, /name: dsh-remote-access/u)
 })
+
+/** Read the `trustedHosts` expression from the shipped bundle patch. */
+async function patchTrustedHostsExpression() {
+  const patch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+  const match = /trustedHosts: !!js "(?<expression>.+)"/u.exec(patch)
+  assert.ok(match?.groups?.expression, 'trustedHosts expression missing from cordis.patch.yml')
+  return match.groups.expression
+}
+
+/** Evaluate the patch expression the loader would evaluate. */
+function evaluatePatch(expression, services, env) {
+  const ctx = { get: (name) => services[name] }
+  return new Function('ctx', 'process', `return (${expression})`)(ctx, { env })
+}
+
+test('bundle patch keeps 0.2.0 bind-derived LAN authorities when both services exist', async () => {
+  const expression = await patchTrustedHostsExpression()
+  const startup = { trustedHosts: ['cli.example.test'] }
+  const runtime = { trustedHosts: ['192.168.1.202', 'cli.example.test'] }
+
+  // dsh 0.2.0 provides webStartup AND webRuntime; webRuntime carries the LAN
+  // literals the wildcard bind derived and already includes the CLI extras.
+  assert.deepEqual(evaluatePatch(expression, { webStartup: startup, webRuntime: runtime }, {}), [
+    '192.168.1.202',
+    'cli.example.test',
+  ])
+})
+
+test('bundle patch keeps 0.2.1 invocation authorities', async () => {
+  const expression = await patchTrustedHostsExpression()
+  const startup = { trustedHosts: ['cli.example.test'] }
+  assert.deepEqual(evaluatePatch(expression, { webStartup: startup }, {}), ['cli.example.test'])
+})
+
+test('bundle patch appends trimmed environment authorities and ignores empties', async () => {
+  const expression = await patchTrustedHostsExpression()
+  assert.deepEqual(
+    evaluatePatch(expression, {}, {
+      DSH_REMOTE_ACCESS_TRUSTED_HOSTS: ' env.example.test , env2.example.test:8443 , ',
+    }),
+    ['env.example.test', 'env2.example.test:8443'],
+  )
+  assert.deepEqual(evaluatePatch(expression, {}, { DSH_REMOTE_ACCESS_TRUSTED_HOSTS: '' }), [])
+})

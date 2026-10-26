@@ -7,7 +7,8 @@ Initial release.
 - Bundle patch appends `DSH_REMOTE_ACCESS_TRUSTED_HOSTS` authorities to the
   `/api` Host/Origin fence, keeping the invocation's `--trusted-host` values.
   One expression covers the dsh 0.2.0 `webRuntime` and 0.2.1 `webStartup`
-  service layouts.
+  service layouts; `webRuntime` is preferred so a 0.2.0 wildcard bind keeps its
+  bind-derived LAN authorities.
 - Host plugin injects the host-owned transport hook into the served index so an
   authenticated non-loopback page reports the loopback view (`loopback`,
   default on).
