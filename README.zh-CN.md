@@ -37,6 +37,15 @@ dsh --profile web --dump-config | grep -A6 'dsh-remote-access'
 
 卸载：`dsh plugin --profile web remove dsh-remote-access`，下次重启即恢复上游默认行为。
 
+### 从源码 patch 迁移
+
+如果现有部署是通过 patch 已安装的 dsh bundle 实现（固定启动令牌 + 强制回环判定），迁移步骤：
+
+1. 安装脚本里不再执行 patch；`npm install -g @deepseek-ai/dsh@<version>` 之后不需要补 patch 步骤。
+2. 按上面的方式把本 bundle 装进 `web` profile，重启 `dsh web`。
+3. 保留部署原有的 `DSH_WEB_TOKEN`（变量名相同，直接沿用）；`--trusted-host` 可继续使用，也可改配 `DSH_REMOTE_ACCESS_TRUSTED_HOSTS`。
+4. 确认启动日志仍打印固定令牌：`dsh web: ...?token=<同一个令牌>`。
+
 ## 配置
 
 ### 环境变量
@@ -103,7 +112,7 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 ## 兼容性
 
 - 已在 dsh `0.2.1-rc.2` 与 `0.2.0-rc.2` 的 Web profile 上验证。
-- 声明范围：`engines.dsh >=0.2.0-0 <0.3.0`。dsh 0.1.x 没有兼容的 bundle 与传输扩展点。
+- 声明范围：`engines.dsh >=0.2.0-0 <0.3.0`。dsh 0.1.x 不受支持，也未测试。
 - 插件行仅适用于 Web profile；headless/SDK profile 没有 `connection` 服务，会拒绝该行。
 - `npm install -g @deepseek-ai/dsh@<version>` 升级 dsh 不会改动 profile，插件继续可用；升级后重启 `dsh web` 即加载新版本。
 - 固定令牌依赖 `connection.browserAuth.launchToken` 字段。若 dsh 改变该结构，配置了令牌时插件会在启动阶段报错；取消令牌配置或升级插件即可。

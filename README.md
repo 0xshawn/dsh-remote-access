@@ -37,6 +37,15 @@ dsh --profile web --dump-config | grep -A6 'dsh-remote-access'
 
 Remove with `dsh plugin --profile web remove dsh-remote-access`; the stock behaviour returns on the next restart.
 
+### Migrating from a source patch
+
+If a deployment currently patches the installed dsh bundles (fixed launch token plus a forced loopback classification), the switch is:
+
+1. Stop applying the patch in the installer; `npm install -g @deepseek-ai/dsh@<version>` no longer needs a follow-up patch step.
+2. Install this bundle into the `web` profile (above) and restart `dsh web`.
+3. Keep the deployment's `DSH_WEB_TOKEN`; it is read by the same name. Keep `--trusted-host` or move the authorities to `DSH_REMOTE_ACCESS_TRUSTED_HOSTS`.
+4. Confirm the startup line still prints the pinned token: `dsh web: ...?token=<same token>`.
+
 ## Configure
 
 ### Environment
@@ -103,7 +112,7 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
 ## Compatibility
 
 - Tested against dsh `0.2.1-rc.2` and `0.2.0-rc.2` (Web profile).
-- Declared range: `engines.dsh >=0.2.0-0 <0.3.0`. dsh 0.1.x has no compatible bundle/transport seams.
+- Declared range: `engines.dsh >=0.2.0-0 <0.3.0`. dsh 0.1.x is not supported or tested.
 - The plugin row is Web-profile only; headless/SDK profiles have no `connection` service and reject the row.
 - `npm install -g @deepseek-ai/dsh@<version>` replaces the dsh install but not the profile: the plugin keeps working after a dsh upgrade. Restart `dsh web` to load a new dsh version.
 - The token seam reads `connection.browserAuth.launchToken`. If dsh changes that shape, the plugin throws at boot when a token is configured; unset the token or update the plugin.
