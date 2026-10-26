@@ -113,7 +113,7 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 
 ## 兼容性
 
-- 已在 dsh `0.2.1-rc.2` 与 `0.2.0-rc.2` 的 Web profile 上验证。
+- 已在 dsh `0.2.1-rc.2`、`0.2.1-rc.3` 与 `0.2.0-rc.2` 的 Web profile 上验证。
 - 声明范围：`engines.dsh >=0.2.0-0 <0.3.0`。dsh 0.1.x 不受支持，也未测试。
 - 插件行仅适用于 Web profile；headless/SDK profile 没有 `connection` 服务，会拒绝该行。
 - `npm install -g @deepseek-ai/dsh@<version>` 升级 dsh 不会改动 profile，插件继续可用；升级后重启 `dsh web` 即加载新版本。

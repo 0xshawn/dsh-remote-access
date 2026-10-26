@@ -113,7 +113,7 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
 
 ## Compatibility
 
-- Tested against dsh `0.2.1-rc.2` and `0.2.0-rc.2` (Web profile).
+- Tested against dsh `0.2.1-rc.2`, `0.2.1-rc.3`, and `0.2.0-rc.2` (Web profile).
 - Declared range: `engines.dsh >=0.2.0-0 <0.3.0`. dsh 0.1.x is not supported or tested.
 - The plugin row is Web-profile only; headless/SDK profiles have no `connection` service and reject the row.
 - `npm install -g @deepseek-ai/dsh@<version>` replaces the dsh install but not the profile: the plugin keeps working after a dsh upgrade. Restart `dsh web` to load a new dsh version.

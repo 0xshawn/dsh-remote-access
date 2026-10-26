@@ -14,4 +14,4 @@ Initial release.
 - Host plugin pins the launch token from plugin config or `DSH_WEB_TOKEN`, so
   the authenticated URL survives restarts.
 - Unit tests for config defaults, token resolution, index injection, and patch
-  shape. Verified end to end on dsh 0.2.1-rc.2 and 0.2.0-rc.2.
+  shape. Verified end to end on dsh 0.2.1-rc.2, 0.2.1-rc.3, and 0.2.0-rc.2.
