@@ -55,7 +55,7 @@ dsh --profile web --dump-config | grep -A6 'dsh-remote-access'
 | `DSH_REMOTE_ACCESS_TRUSTED_HOSTS` | 逗号分隔的裸权威，如 `dsh.example.com,dsh.example.com:8443` | 追加到 `--trusted-host`；不带端口的条目匹配任意端口 |
 | `DSH_WEB_TOKEN` | 非空启动令牌 | 固定登录令牌；为空或未设置时保持上游的每进程随机令牌 |
 
-两者都可以放在 systemd 的 `Environment=`/`EnvironmentFile=`、launchd 的 `EnvironmentVariables`、Docker 环境变量或 shell profile 中。习惯命令行参数时继续用 `--trusted-host` 即可，patch 层做的是拼接而非替换：
+两者都可以放在 systemd 的 `Environment=`/`EnvironmentFile=`、launchd 的 `EnvironmentVariables`、Docker 环境变量或 shell profile 中。习惯命令行参数时继续用 `--trusted-host` 即可；表达式会把这些环境权威追加到命令行列表之后。注意 patch 层会整体替换 `connection.config`：若另一个层（或更靠后的 profile patch）覆盖了 `connection`，需要在那里重新写上 `trustedHosts`（否则环境权威会丢失），并补齐仍需保留的键，例如 `cookieMaxAgeDays`、`recovery`。
 
 ```sh
 DSH_WEB_TOKEN="$(cat /etc/dsh/web-token)" \
@@ -101,7 +101,7 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
    if (globalThis.__DSH_TRANSPORT__ === void 0) globalThis.__DSH_TRANSPORT__ = { ownsHost: true };
    ```
 
-   `ClientTransportHooks.ownsHost` 是上游"本页面拥有 Host"的公开标志；`dsh-client-connection` 据此报告回环视图，但页面仍使用正常的 HTTP + WebSocket 传输。守卫语句不会覆盖真实 shell 提供的 transport，脚本在 shell 入口和全部客户端插件之前执行。
+   `ClientTransportHooks.ownsHost` 是上游"本页面拥有 Host"的标志，但文档将其保留给自行组装 transport 的 shell，并声明服务端返回的页面从不携带该全局变量。本 bundle 有意设置它来获得 owner 视图：`dsh-client-connection` 据此报告回环视图，但页面仍使用正常的 HTTP + WebSocket 传输。守卫语句不会覆盖真实 shell 提供的 transport，脚本在 shell 入口和全部客户端插件之前执行。
 3. **启动令牌 —— 服务字段。** 插件等待 `ctx.connection` 就绪，在 Loader 结算前设置 `connection.browserAuth.launchToken`，打印的认证 URL 与令牌校验因此统一使用固定值。若未来 dsh 隐藏该字段，插件会显式报错，而不是悄悄退回随机 URL。
 
 ## 安全说明
@@ -109,15 +109,19 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 - **启动令牌就是凭据。** 持有打印出来的 `?token=` URL 即可换取会话 Cookie 并获得完整 owner 权限。请谨慎分发；固定令牌是长期凭据，绝不能提交到仓库。修改 `DSH_WEB_TOKEN` 并重启只会让旧 URL 失效，**不会**吊销已经签发的 Cookie（默认有效期 `cookieMaxAgeDays` 为 30 天）；要真正吊销，请清除该站点的 Cookie，或删除 browser-session 凭据记录后重启。
 - **信任权威不等于认证。** 它只让该权威通过 Host/Origin 围栏；签名会话 Cookie 仍把守每个 RPC。不要把监听端口暴露到不受信任的网络；需要时用 TLS 和自控代理。
 - **回环视图是权限决定。** dsh 0.2.0 下它让已认证远程浏览器的设置改为写入宿主机；所有版本下它会暴露仅限本机的界面操作，例如 **Open configuration file** 会在**宿主机**的编辑器里打开设置文件。远程浏览器本来就持有 owner 凭据；希望保持上游最小权限视图的运维方可以设置 `loopback: false`。
+- **回环视图超出了文档化的客户端契约。** 上游把 `ownsHost` 保留给自行组装 transport 的 shell，并声明服务端返回的页面从不携带该全局变量；本 bundle 有意设置它。当前 dsh 的所有消费方都只把它用于 `isLoopback`，但未来或第三方客户端插件可能把它当作宿主所有权的证明。设置 `loopback: false` 可消除该暴露面。
 - **纯 HTTP 会泄露令牌。** 在代理侧或通过 `--tls-cert/--tls-key` 终结 TLS；Cookie 的 `Secure` 行为见上游文档。
+- **不要新增会拦截内联脚本的 CSP。** 回环视图行是一段内联经典脚本；dsh 自身的启动全局变量已经要求内联脚本权限，但代理注入的不含 `'unsafe-inline'`（或未用 nonce 覆盖）的 CSP 会静默拦截该脚本，而页面仍能加载。
 
 ## 兼容性
 
 - 已在 dsh `0.2.1-rc.2`、`0.2.1-rc.3` 与 `0.2.0-rc.2` 的 Web profile 上验证。
-- 声明范围：`engines.dsh >=0.2.0-0 <0.3.0`。dsh 0.1.x 不受支持，也未测试。
-- 插件行仅适用于 Web profile；headless/SDK profile 没有 `connection` 服务，会拒绝该行。
+- 声明范围：`engines.dsh >=0.2.0-0 <0.3.0-0`。dsh 0.1.x 不受支持，也未测试。
+- dsh 0.2.0 中 profile 级通配绑定（`webserver.host: 0.0.0.0`）会推导出 LAN 权威；本 patch 会保留它们，因此打印出的 LAN URL 无需额外 trusted-host 即可使用。
+- 插件行仅适用于 Web profile；没有 `connection` 服务的 profile 中该行保持 inactive，安装也不会生效。
 - `npm install -g @deepseek-ai/dsh@<version>` 升级 dsh 不会改动 profile，插件继续可用；升级后重启 `dsh web` 即加载新版本。
 - 固定令牌依赖 `connection.browserAuth.launchToken` 字段。若 dsh 改变该结构，配置了令牌时插件会在启动阶段报错；取消令牌配置或升级插件即可。
+- 固定动作只在启动时执行一次。宿主插件热重载（HMR）可能用 dsh 缓存的每进程令牌重建 Connection 服务，且不会重新打印启动 URL；更换令牌或升级 dsh 后请重启 `dsh web`。
 
 ## 开发
 

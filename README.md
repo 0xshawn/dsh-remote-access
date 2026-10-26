@@ -55,7 +55,7 @@ If a deployment currently patches the installed dsh bundles (fixed launch token 
 | `DSH_REMOTE_ACCESS_TRUSTED_HOSTS` | comma-separated bare authorities, e.g. `dsh.example.com,dsh.example.com:8443` | appended to `--trusted-host`; a port-less entry matches any port |
 | `DSH_WEB_TOKEN` | non-empty launch token | pins the login token; empty/unset keeps the random per-process token |
 
-Both work in systemd `Environment=`/`EnvironmentFile=`, launchd `EnvironmentVariables`, Docker env, or a shell profile. Keep `--trusted-host` if you prefer flags; the patch concatenates, it does not replace:
+Both work in systemd `Environment=`/`EnvironmentFile=`, launchd `EnvironmentVariables`, Docker env, or a shell profile. Keep `--trusted-host` if you prefer flags; the expression appends the environment authorities to the invocation list. Note that a patch layer replaces the whole `connection.config`: if another layer (or a later profile patch) overrides `connection`, restate `trustedHosts` there — otherwise the environment authorities are dropped — and restate any other key you still need, such as `cookieMaxAgeDays` or `recovery`.
 
 ```sh
 DSH_WEB_TOKEN="$(cat /etc/dsh/web-token)" \
@@ -101,7 +101,7 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
    if (globalThis.__DSH_TRANSPORT__ === void 0) globalThis.__DSH_TRANSPORT__ = { ownsHost: true };
    ```
 
-   `ClientTransportHooks.ownsHost` is upstream's documented flag for "this page owns the Host"; `dsh-client-connection` reports the loopback view without changing the page's HTTP + WebSocket carrier. The guard leaves any real shell-provided transport untouched, and the script runs before the shell entry and every client plugin.
+   `ClientTransportHooks.ownsHost` is upstream's flag for "this page owns the Host", documented as reserved for a shell that assembles its own transport; upstream also states that served pages never carry the global. This bundle sets it deliberately to obtain owner parity: `dsh-client-connection` reports the loopback view without changing the page's HTTP + WebSocket carrier. The guard leaves any real shell-provided transport untouched, and the script runs before the shell entry and every client plugin.
 3. **Launch token — service field.** The plugin waits for `ctx.connection` and sets `connection.browserAuth.launchToken` before the loader settles, so both the printed authenticated URL and token validation use the pinned value. If a future dsh version hides that field, the plugin fails loudly instead of silently printing a random URL.
 
 ## Security
@@ -109,15 +109,19 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
 - **The launch token is the credential.** Anyone holding the printed `?token=` URL can obtain a session cookie and full owner access. Share it deliberately. A pinned token is a long-lived credential — never commit it. Changing `DSH_WEB_TOKEN` and restarting invalidates the old URL but does **not** revoke cookies already issued (they live for `cookieMaxAgeDays`, 30 days by default); clear the site's cookies, or remove the browser-session credential record and restart, to revoke them.
 - **Trusted hosts are not authentication.** They only admit the authority to the Host/Origin fence; the signed session cookie still gates every RPC. Never expose the listener port to an untrusted network without TLS and a proxy you control.
 - **Loopback parity is a privilege decision.** On dsh 0.2.0 it makes settings host-backed for authenticated remote browsers; on every version it exposes local-only UI affordances such as **Open configuration file**, which opens the settings document in the *host's* editor. Remote browsers already hold owner credentials, but operators who want the stock least-privilege view can set `loopback: false`.
+- **The loopback view goes beyond a documented client contract.** Upstream documents `ownsHost` as reserved for a shell that assembles its own transport and says served pages never carry the global. This bundle sets it anyway; every current dsh consumer reads it only for `isLoopback`, but a future or third-party client plugin could treat it as proof of host ownership. `loopback: false` removes that exposure.
 - **Plain HTTP leaks the token.** Terminate TLS at the proxy or with `--tls-cert/--tls-key`; the upstream guide covers cookie `Secure` behaviour.
+- **Do not add a CSP that blocks inline scripts.** The loopback row is an inline classic script; dsh's own boot globals already require inline script permission, but a proxy-injected CSP without `'unsafe-inline'` (or a nonce covering it) silently blocks the row while the page still loads.
 
 ## Compatibility
 
 - Tested against dsh `0.2.1-rc.2`, `0.2.1-rc.3`, and `0.2.0-rc.2` (Web profile).
-- Declared range: `engines.dsh >=0.2.0-0 <0.3.0`. dsh 0.1.x is not supported or tested.
-- The plugin row is Web-profile only; headless/SDK profiles have no `connection` service and reject the row.
+- Declared range: `engines.dsh >=0.2.0-0 <0.3.0-0`. dsh 0.1.x is not supported or tested.
+- On dsh 0.2.0 a profile-level wildcard bind (`webserver.host: 0.0.0.0`) derives LAN authorities; the patch preserves them, so the printed LAN URL works without extra trusted-host entries.
+- The plugin row is Web-profile only; in a profile without a `connection` service the row stays inactive, so installing it there achieves nothing.
 - `npm install -g @deepseek-ai/dsh@<version>` replaces the dsh install but not the profile: the plugin keeps working after a dsh upgrade. Restart `dsh web` to load a new dsh version.
 - The token seam reads `connection.browserAuth.launchToken`. If dsh changes that shape, the plugin throws at boot when a token is configured; unset the token or update the plugin.
+- The pin runs once at startup. A host-plugin reload (HMR) can rebuild the Connection service from dsh's cached per-process token and will not reprint the startup URL; restart `dsh web` after changing the token or the dsh version.
 
 ## Development
 
