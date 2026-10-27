@@ -6,10 +6,13 @@ import {
   apply,
   Config,
   inject,
+  installLoginPage,
+  loginPageHtml,
   loopbackIndexRow,
   name,
   pinLaunchToken,
   resolveLaunchToken,
+  tokenMatches,
 } from '../lib/index.js'
 
 /** Minimal Cordis context: one event emitter plus a `get` service lookup. */
@@ -39,10 +42,11 @@ test('plugin metadata follows the Cordis plugin shape', () => {
 })
 
 test('Config defaults keep the patch behaviour', () => {
-  assert.deepEqual(Config({}), { loopback: true, launchToken: '' })
-  assert.deepEqual(Config({ loopback: false, launchToken: 'fixed' }), {
+  assert.deepEqual(Config({}), { loopback: true, launchToken: '', loginPage: true })
+  assert.deepEqual(Config({ loopback: false, launchToken: 'fixed', loginPage: false }), {
     loopback: false,
     launchToken: 'fixed',
+    loginPage: false,
   })
   assert.throws(() => Config({ loopback: 'yes' }), /expected boolean/u)
 })
@@ -169,4 +173,147 @@ test('bundle patch appends trimmed environment authorities and ignores empties',
     ['env.example.test', 'env2.example.test:8443'],
   )
   assert.deepEqual(evaluatePatch(expression, {}, { DSH_REMOTE_ACCESS_TRUSTED_HOSTS: '' }), [])
+})
+
+
+function fakeResponse() {
+  const response = { status: undefined, headers: undefined, body: undefined, ended: false }
+  response.writeHead = (status, headers) => {
+    response.status = status
+    response.headers = headers
+  }
+  response.end = (body) => {
+    response.body = body
+    response.ended = true
+  }
+  return response
+}
+
+function loginFixture(options = {}) {
+  const originalCalls = []
+  const connection = {
+    browserAuth: {
+      launchToken: options.launchToken ?? 'correct-token',
+      isAuthenticated: () => options.authenticated ?? false,
+    },
+    isTrusted: () => options.trusted ?? true,
+    authorizeIndex: (request, response) => {
+      originalCalls.push({ request, response })
+      response.original = true
+      return true
+    },
+  }
+  const disposers = []
+  const ctx = {
+    get: (service) => (service === 'webServer' ? { protocol: options.protocol ?? 'http:' } : undefined),
+    effect: (callback) => {
+      disposers.push(callback())
+    },
+  }
+  const installed = installLoginPage(ctx, connection, {
+    loginPage: options.loginPage ?? true,
+  })
+  return { connection, ctx, disposers, installed, originalCalls }
+}
+
+function fakeRequest(url = '/', method = 'GET') {
+  return { url, method, headers: {} }
+}
+
+test('tokenMatches compares exact tokens', () => {
+  assert.equal(tokenMatches('abc', 'abc'), true)
+  assert.equal(tokenMatches('abc', 'abd'), false)
+  assert.equal(tokenMatches('abc', 'abcd'), false)
+  assert.equal(tokenMatches('', ''), true)
+})
+
+test('loginPageHtml renders the token form and error state', () => {
+  const form = loginPageHtml(false)
+  assert.match(form, /<form method="get" action="\.">/u)
+  assert.match(form, /name="token"/u)
+  assert.match(form, /type="password"/u)
+  assert.doesNotMatch(form, /not accepted/u)
+  assert.match(loginPageHtml(true), /not accepted/u)
+})
+
+test('login page serves a 401 form to unauthenticated browsers', () => {
+  const fixture = loginFixture()
+  assert.equal(fixture.installed, true)
+  const response = fakeResponse()
+  const result = fixture.connection.authorizeIndex(fakeRequest('/'), response)
+  assert.equal(result, false)
+  assert.equal(fixture.originalCalls.length, 0)
+  assert.equal(response.status, 401)
+  assert.match(response.headers['content-type'], /text\/html/u)
+  assert.match(response.headers['content-security-policy'], /form-action 'self'/u)
+  assert.match(response.body, /Enter the launch token/u)
+})
+
+test('login page reports a rejected token', () => {
+  const fixture = loginFixture()
+  const response = fakeResponse()
+  fixture.connection.authorizeIndex(fakeRequest('/?token=wrong'), response)
+  assert.equal(response.status, 401)
+  assert.match(response.body, /not accepted/u)
+})
+
+test('an authenticated browser keeps the stock index path', () => {
+  const fixture = loginFixture({ authenticated: true })
+  const response = fakeResponse()
+  fixture.connection.authorizeIndex(fakeRequest('/'), response)
+  assert.equal(fixture.originalCalls.length, 1)
+  assert.equal(response.body, undefined)
+})
+
+test('a valid token keeps the stock token exchange', () => {
+  const fixture = loginFixture()
+  const response = fakeResponse()
+  fixture.connection.authorizeIndex(fakeRequest('/?token=correct-token'), response)
+  assert.equal(fixture.originalCalls.length, 1)
+})
+
+test('a valid token on a mounted index request redirects to the directory root', () => {
+  const fixture = loginFixture()
+  const response = fakeResponse()
+  fixture.connection.authorizeIndex(fakeRequest('/index.html?token=correct-token'), response)
+  assert.equal(fixture.originalCalls.length, 0)
+  assert.equal(response.status, 303)
+  assert.equal(response.headers.location, './?token=correct-token')
+})
+
+test('an untrusted authority keeps the stock behavior', () => {
+  const fixture = loginFixture({ trusted: false })
+  const response = fakeResponse()
+  fixture.connection.authorizeIndex(fakeRequest('/'), response)
+  assert.equal(fixture.originalCalls.length, 1)
+  assert.equal(response.status, undefined)
+})
+
+test('non-GET requests keep the stock behavior', () => {
+  const fixture = loginFixture()
+  const response = fakeResponse()
+  fixture.connection.authorizeIndex(fakeRequest('/', 'HEAD'), response)
+  assert.equal(fixture.originalCalls.length, 1)
+})
+
+test('loginPage: false leaves authorizeIndex untouched', () => {
+  const fixture = loginFixture({ loginPage: false })
+  assert.equal(fixture.installed, false)
+  assert.equal(fixture.connection.authorizeIndex.name, 'authorizeIndex')
+  fixture.connection.authorizeIndex(fakeRequest('/'), fakeResponse())
+  assert.equal(fixture.originalCalls.length, 1)
+})
+
+test('plugin disposal restores the stock authorizeIndex', () => {
+  const fixture = loginFixture()
+  const installed = fixture.connection.authorizeIndex
+  assert.equal(fixture.installed, true)
+  fixture.disposers[0]()
+  assert.notEqual(fixture.connection.authorizeIndex, installed)
+  assert.equal(fixture.connection.authorizeIndex.name, 'authorizeIndex')
+})
+
+test('login page is skipped on a Connection service without browser auth', () => {
+  const ctx = { get: () => undefined, effect: () => {} }
+  assert.equal(installLoginPage(ctx, {}, { loginPage: true }), false)
 })

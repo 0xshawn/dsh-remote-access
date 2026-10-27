@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0 — 2026-10-27
+
+First-login form.
+
+- Serve a token entry form (`loginPage`, default on) when an unauthenticated
+  browser opens the bare deployment URL instead of the printed `?token=` URL.
+  The form posts the token back to the relative index path and reuses the stock
+  token exchange, cookie, proxy-mount, and clean-URL redirect.
+- Only a request authority that already passes the Host/Origin fence receives
+  the form; untrusted authorities keep the plain `401`, and a rejected token
+  re-renders the form with an error.
+- Implemented by wrapping `connection.authorizeIndex`; the stock method is
+  restored on plugin disposal, and a missing seam disables the form without
+  affecting the rest of the bundle.
+
 ## 0.1.0 — 2026-10-26
 
 Initial release.

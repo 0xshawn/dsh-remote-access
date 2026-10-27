@@ -16,6 +16,7 @@
 | `/api` 的 Host/Origin 信任围栏 | 只接受 loopback、监听绑定的 IP 字面量和 `--trusted-host`；经代理的权威访问所有 RPC 返回 `403` | 把 `DSH_REMOTE_ACCESS_TRUSTED_HOSTS` 中的权威追加进同一列表（`--trusted-host` 继续有效） |
 | 页面视图（`connection.isLoopback`） | 仅由 `location.hostname` 判定；经代理的页面被当作非回环，dsh 0.2.0 下设置只存在于进程内存（Models 页报 `settings are unavailable in this browser`），所有版本都会隐藏打开宿主机配置文件的操作 | 注入 `__DSH_TRANSPORT__ = { ownsHost: true }` —— dsh 桌面壳使用的宿主自有传输钩子 —— 已认证页面因此呈现回环视图 |
 | 启动令牌 | 每个进程随机生成，重启后只能从服务日志里找登录 URL | 通过 `DSH_WEB_TOKEN`（或插件配置）固定令牌，重启后登录 URL 不变 |
+| 首次登录 | 直接打开裸地址返回纯文本 `401`，必须使用打印出来的 `?token=` URL | 裸地址上提供 HTML 令牌输入框（`loginPage`，默认开启），提交后仍走上游的令牌交换 |
 
 认证机制不变：浏览器仍需用启动令牌换取与权威绑定的签名会话 Cookie，每次 `/api` 请求仍先经过 Host/Origin 围栏。本插件只消除部署摩擦，不新增也不绕过访问控制。
 
@@ -77,7 +78,16 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
     # 固定令牌；留空则回退到 DSH_WEB_TOKEN，再回退到随机令牌。
     # 推荐使用 DSH_WEB_TOKEN：profile 配置以明文保存。
     launchToken: ''
+    # 未带令牌或 Cookie 直接打开裸地址时，显示令牌输入框。
+    # 设为 false 可恢复上游的纯文本 401。
+    loginPage: true
 ```
+
+### 首次登录：不用带 token 的 URL
+
+未认证的浏览器直接打开裸部署地址时，会看到一个简单的登录表单，而不是纯文本 `401`。表单把令牌提交回相对的 index 路径（`GET ./?token=...`），因此上游的令牌交换、签名 Cookie、反代挂载前缀和跳转到干净 URL 的逻辑全部照旧。令牌错误时表单重新显示并给出错误提示；令牌正确则完成登录。
+
+只有请求权威已经通过部署的 Host/Origin 围栏（loopback、监听绑定字面量，或 `DSH_REMOTE_ACCESS_TRUSTED_HOSTS`/`--trusted-host` 中的权威）时才会返回表单；不受信任的权威仍得到纯文本 `401`，因此 DNS rebinding 或外部主机无法借此收集令牌。令牌仍然出现在查询串里（与打印的 URL 相同），也仍然是唯一凭据；表单没有引入第二套密码存储，也没有绕过认证。若前置代理已有自己的登录页，可设 `loginPage: false` 恢复上游 `401`。
 
 ### 反向代理
 
@@ -103,6 +113,7 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 
    `ClientTransportHooks.ownsHost` 是上游"本页面拥有 Host"的标志，但文档将其保留给自行组装 transport 的 shell，并声明服务端返回的页面从不携带该全局变量。本 bundle 有意设置它来获得 owner 视图：`dsh-client-connection` 据此报告回环视图，但页面仍使用正常的 HTTP + WebSocket 传输。守卫语句不会覆盖真实 shell 提供的 transport，脚本在 shell 入口和全部客户端插件之前执行。
 3. **启动令牌 —— 服务字段。** 插件等待 `ctx.connection` 就绪，在 Loader 结算前设置 `connection.browserAuth.launchToken`，打印的认证 URL 与令牌校验因此统一使用固定值。若未来 dsh 隐藏该字段，插件会显式报错，而不是悄悄退回随机 URL。
+4. **登录表单 —— index 授权。** 插件包装 `connection.authorizeIndex`：`dsh-host-frontend-static` 在返回 index 前调用它。来自受信任权威、未认证的 GET index 请求得到令牌表单（内容为 HTML 的 `401`）；已认证、携带有效令牌、来自不受信任权威或非 GET 的请求都交回上游实现。插件卸载时恢复原方法。若未来 dsh 移除该方法，表单会静默禁用，裸地址恢复上游纯文本 `401`，其余功能不受影响。
 
 ## 安全说明
 
@@ -111,6 +122,7 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 - **回环视图是权限决定。** dsh 0.2.0 下它让已认证远程浏览器的设置改为写入宿主机；所有版本下它会暴露仅限本机的界面操作，例如 **Open configuration file** 会在**宿主机**的编辑器里打开设置文件。远程浏览器本来就持有 owner 凭据；希望保持上游最小权限视图的运维方可以设置 `loopback: false`。
 - **回环视图超出了文档化的客户端契约。** 上游把 `ownsHost` 保留给自行组装 transport 的 shell，并声明服务端返回的页面从不携带该全局变量；本 bundle 有意设置它。当前 dsh 的所有消费方都只把它用于 `isLoopback`，但未来或第三方客户端插件可能把它当作宿主所有权的证明。设置 `loopback: false` 可消除该暴露面。
 - **纯 HTTP 会泄露令牌。** 在代理侧或通过 `--tls-cert/--tls-key` 终结 TLS；Cookie 的 `Secure` 行为见上游文档。
+- **登录表单不做限流。** 它只是把同一个高熵启动令牌的输入入口暴露出来；对公网端点仍建议在代理层做限流。Host/Origin 围栏拒绝的权威永远不会看到表单。
 - **不要新增会拦截内联脚本的 CSP。** 回环视图行是一段内联经典脚本；dsh 自身的启动全局变量已经要求内联脚本权限，但代理注入的不含 `'unsafe-inline'`（或未用 nonce 覆盖）的 CSP 会静默拦截该脚本，而页面仍能加载。
 
 ## 兼容性
@@ -121,6 +133,7 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 - 插件行仅适用于 Web profile；没有 `connection` 服务的 profile 中该行保持 inactive，安装也不会生效。
 - `npm install -g @deepseek-ai/dsh@<version>` 升级 dsh 不会改动 profile，插件继续可用；升级后重启 `dsh web` 即加载新版本。
 - 固定令牌依赖 `connection.browserAuth.launchToken` 字段。若 dsh 改变该结构，配置了令牌时插件会在启动阶段报错；取消令牌配置或升级插件即可。
+- 登录表单包装 `connection.authorizeIndex` 并读取 `browserAuth.isAuthenticated`。若未来 dsh 移除二者，表单会被跳过，裸地址恢复上游纯文本 `401`，插件其余功能继续工作。
 - 固定动作只在启动时执行一次。宿主插件热重载（HMR）可能用 dsh 缓存的每进程令牌重建 Connection 服务，且不会重新打印启动 URL；更换令牌或升级 dsh 后请重启 `dsh web`。
 
 ## 开发

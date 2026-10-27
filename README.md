@@ -16,6 +16,7 @@ Stock `dsh web` is built for a browser on the same machine. Three things break w
 | `/api` Host/Origin fence | accepts loopback, the listener's bind literal, and `--trusted-host` only; every RPC answers `403` for a proxy authority | appends `DSH_REMOTE_ACCESS_TRUSTED_HOSTS` authorities to the same list (`--trusted-host` keeps working) |
 | Page view (`connection.isLoopback`) | derived from `location.hostname`; a proxied page is treated as non-loopback, so on dsh 0.2.0 settings stay in process-local memory (`settings are unavailable in this browser` on the Models page) and on every version the host-document action is hidden | injects `__DSH_TRANSPORT__ = { ownsHost: true }`, the host-owned transport hook dsh already uses for its desktop shell, so authenticated pages report the loopback view |
 | Launch token | random per process; the only way to find the login URL after a restart is the service log | pins `DSH_WEB_TOKEN` (or plugin config) across restarts |
+| First login | opening the bare deployment URL answers a plain `401`, so the token must come from the printed `?token=` URL | serves an HTML token form on the bare URL (`loginPage`, default on) and feeds the submitted token back into the stock exchange |
 
 Authentication is unchanged: the browser still has to exchange the launch token for the signed, authority-bound session cookie, and the Host/Origin fence still runs before every `/api` request. This plugin removes deployment friction; it does not bypass access control.
 
@@ -77,7 +78,27 @@ Override the `dsh-remote-access` row in the profile patch (`$DSH_HOME/profiles/w
     # Fixed token; empty falls back to DSH_WEB_TOKEN, then the random token.
     # Prefer DSH_WEB_TOKEN: profile configuration is plain text.
     launchToken: ''
+    # Serve a token entry form when the bare URL is opened without a token
+    # or cookie. false restores the stock plain 401.
+    loginPage: true
 ```
+
+### First login without the token URL
+
+An unauthenticated browser that opens the bare deployment URL gets a small
+sign-in form instead of the plain `401`. The form submits the token back to the
+relative index path (`GET ./?token=...`), so the stock token exchange, signed
+cookie, proxy mount handling, and redirect to the clean URL all still apply. A
+wrong token simply re-renders the form with an error; a valid token logs in.
+
+The form is served only when the request authority already passes the
+deployment's Host/Origin fence (loopback, the bind literal, or a
+`DSH_REMOTE_ACCESS_TRUSTED_HOSTS`/`--trusted-host` authority). An untrusted
+authority keeps the plain `401`, so a DNS-rebinding or foreign host cannot
+collect the token. The token still travels in the query string exactly like the
+printed URL, and it remains the only credential; the form does not introduce a
+second password store or a bypass. Set `loginPage: false` to restore the stock
+`401` if a deployment fronting the port has its own login page.
 
 ### Behind a reverse proxy
 
@@ -103,6 +124,7 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
 
    `ClientTransportHooks.ownsHost` is upstream's flag for "this page owns the Host", documented as reserved for a shell that assembles its own transport; upstream also states that served pages never carry the global. This bundle sets it deliberately to obtain owner parity: `dsh-client-connection` reports the loopback view without changing the page's HTTP + WebSocket carrier. The guard leaves any real shell-provided transport untouched, and the script runs before the shell entry and every client plugin.
 3. **Launch token — service field.** The plugin waits for `ctx.connection` and sets `connection.browserAuth.launchToken` before the loader settles, so both the printed authenticated URL and token validation use the pinned value. If a future dsh version hides that field, the plugin fails loudly instead of silently printing a random URL.
+4. **Login form — index authorization.** The plugin wraps `connection.authorizeIndex`, the seam `dsh-host-frontend-static` calls before serving the index. Unauthenticated GET index requests from a trusted authority get the token form (`401` with HTML); requests that are authenticated, carry a valid token, come from an untrusted authority, or use another method delegate to the stock implementation. The wrapper is restored on plugin disposal. If a future dsh version drops that method, the form is silently disabled and the stock `401` remains.
 
 ## Security
 
@@ -111,6 +133,7 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
 - **Loopback parity is a privilege decision.** On dsh 0.2.0 it makes settings host-backed for authenticated remote browsers; on every version it exposes local-only UI affordances such as **Open configuration file**, which opens the settings document in the *host's* editor. Remote browsers already hold owner credentials, but operators who want the stock least-privilege view can set `loopback: false`.
 - **The loopback view goes beyond a documented client contract.** Upstream documents `ownsHost` as reserved for a shell that assembles its own transport and says served pages never carry the global. This bundle sets it anyway; every current dsh consumer reads it only for `isLoopback`, but a future or third-party client plugin could treat it as proof of host ownership. `loopback: false` removes that exposure.
 - **Plain HTTP leaks the token.** Terminate TLS at the proxy or with `--tls-cert/--tls-key`; the upstream guide covers cookie `Secure` behaviour.
+- **The login form does not rate-limit.** It only reveals an input for the same high-entropy launch token the printed URL carries; a proxy-level rate limit is still the right control for exposed endpoints. The form never renders for an authority the Host/Origin fence rejects.
 - **Do not add a CSP that blocks inline scripts.** The loopback row is an inline classic script; dsh's own boot globals already require inline script permission, but a proxy-injected CSP without `'unsafe-inline'` (or a nonce covering it) silently blocks the row while the page still loads.
 
 ## Compatibility
@@ -121,6 +144,7 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
 - The plugin row is Web-profile only; in a profile without a `connection` service the row stays inactive, so installing it there achieves nothing.
 - `npm install -g @deepseek-ai/dsh@<version>` replaces the dsh install but not the profile: the plugin keeps working after a dsh upgrade. Restart `dsh web` to load a new dsh version.
 - The token seam reads `connection.browserAuth.launchToken`. If dsh changes that shape, the plugin throws at boot when a token is configured; unset the token or update the plugin.
+- The login form wraps `connection.authorizeIndex` and reads `browserAuth.isAuthenticated`. If a future dsh version removes either, the form is skipped and the bare URL answers the stock plain `401`; the rest of the plugin keeps working.
 - The pin runs once at startup. A host-plugin reload (HMR) can rebuild the Connection service from dsh's cached per-process token and will not reprint the startup URL; restart `dsh web` after changing the token or the dsh version.
 
 ## Development
