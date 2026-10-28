@@ -13,8 +13,9 @@ patch in `cordis.patch.yml`, and the install/behaviour docs in `README*.md`.
   fine), obtain independent review, and squash-merge. Never commit code
   directly to `main`.
 - Keep code comments and commit messages in English.
-- Update `CHANGELOG.md` and both READMEs for user-visible behaviour. Bump
-  `package.json` and push the release tag only after the PR merges.
+- Update `CHANGELOG.md`, both READMEs, and the `package.json` version inside
+  the PR when the change is user-visible. Push the release tag against the
+  squash-merged `main` commit after the PR merges.
 
 ## Validation
 
