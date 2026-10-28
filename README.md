@@ -9,7 +9,7 @@ Serve the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (d
 
 ## What this fixes
 
-Stock `dsh web` is built for a browser on the same machine. Three things break when the browser reaches it through any other authority:
+Stock `dsh web` is built for a browser on the same machine. Four things are missing or break when the browser reaches it through another authority:
 
 | Problem | Stock dsh | This plugin |
 |---|---|---|
@@ -17,6 +17,7 @@ Stock `dsh web` is built for a browser on the same machine. Three things break w
 | Page view (`connection.isLoopback`) | derived from `location.hostname`; a proxied page is treated as non-loopback, so on dsh 0.2.0 settings stay in process-local memory (`settings are unavailable in this browser` on the Models page) and on every version the host-document action is hidden | injects `__DSH_TRANSPORT__ = { ownsHost: true }`, the host-owned transport hook dsh already uses for its desktop shell, so authenticated pages report the loopback view |
 | Launch token | random per process; the only way to find the login URL after a restart is the service log | pins `DSH_WEB_TOKEN` (or plugin config) across restarts |
 | First login | opening the bare deployment URL answers a plain `401`, so the token must come from the printed `?token=` URL | serves an HTML token form on the bare URL (`loginPage`, default on) and feeds the submitted token back into the stock exchange |
+| Background attention | a finished session or a pending approval/question stays invisible while the tab is in the background | raises a Web Notification for completion and for pending input (`notifications`, default on) |
 
 Authentication is unchanged: the browser still has to exchange the launch token for the signed, authority-bound session cookie, and the Host/Origin fence still runs before every `/api` request. This plugin removes deployment friction; it does not bypass access control.
 
@@ -81,6 +82,8 @@ Override the `dsh-remote-access` row in the profile patch (`$DSH_HOME/profiles/w
     # Serve a token entry form when the bare URL is opened without a token
     # or cookie. false restores the stock plain 401.
     loginPage: true
+    # Enable the browser-notification client half.
+    notifications: true
 ```
 
 ### First login without the token URL
@@ -111,6 +114,29 @@ second password store or a bypass. Set `loginPage: false` to restore the stock
 
 See upstream [Publish the Web UI behind a reverse proxy](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/guide/public-deployments.md) for the full checklist. TLS termination, network isolation, and who may reach the port remain the operator's job.
 
+### Browser notifications
+
+The bundle also ships a browser client half (plain hand-written bundle, no build
+step). It watches the Session status source and raises a Web Notification when:
+
+- a top-level session transitions from running to idle — `Task finished: <title>`;
+- a session starts waiting for approval, plan review, or an answer —
+  `Approval needed` / `Plan review needed` / `Input needed`.
+
+Notifications appear only while the page is hidden or the window is unfocused,
+and only after the browser grants notification permission. The page asks once on
+the first click or keypress; grant it for the deployment origin. Clicking a
+notification brings the dsh window back to the foreground. Subagent and removed
+sessions are skipped. Set `notifications: false` in the plugin config to turn
+the client half off.
+
+Limitations: this uses page Web Notifications, not Web Push. The dsh page must
+stay open in a tab (it may be backgrounded); a fully closed browser receives
+nothing. Permission requires a secure context, so use HTTPS or loopback, not
+plain HTTP on a LAN address. Notification text includes the session title, so
+lock-screen previews may expose it.
+
+
 ## How it works
 
 The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deepseek-ai/dsh-base` + `@deepseek-ai/dsh-web-app`, and two seams are used.
@@ -125,6 +151,13 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
    `ClientTransportHooks.ownsHost` is upstream's flag for "this page owns the Host", documented as reserved for a shell that assembles its own transport; upstream also states that served pages never carry the global. This bundle sets it deliberately to obtain owner parity: `dsh-client-connection` reports the loopback view without changing the page's HTTP + WebSocket carrier. The guard leaves any real shell-provided transport untouched, and the script runs before the shell entry and every client plugin.
 3. **Launch token — service field.** The plugin waits for `ctx.connection` and sets `connection.browserAuth.launchToken` before the loader settles, so both the printed authenticated URL and token validation use the pinned value. If a future dsh version hides that field, the plugin fails loudly instead of silently printing a random URL.
 4. **Login form — index authorization.** The plugin wraps `connection.authorizeIndex`, the seam `dsh-host-frontend-static` calls before serving the index. Unauthenticated GET index requests from a trusted authority get the token form (`401` with HTML); requests that are authenticated, carry a valid token, come from an untrusted authority, or use another method delegate to the stock implementation. The wrapper is restored on plugin disposal. If a future dsh version drops that method, the form is silently disabled and the stock `401` remains.
+
+5. **Notifications — client plugin.** `package.json` declares `dsh.client` with
+   `platform: web` and exports `./client`; `dsh-client-modules` serves the
+   browser bundle to the page. The client subscribes to
+   `ctx.uiSession.sessionStatus` through the `sessions` and `uiSession`
+   services and raises local Web Notifications; the Host only injects the
+   `__DSH_REMOTE_ACCESS_NOTIFY__` feature flag from `config.notifications`.
 
 ## Security
 
@@ -145,6 +178,7 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
 - `npm install -g @deepseek-ai/dsh@<version>` replaces the dsh install but not the profile: the plugin keeps working after a dsh upgrade. Restart `dsh web` to load a new dsh version.
 - The token seam reads `connection.browserAuth.launchToken`. If dsh changes that shape, the plugin throws at boot when a token is configured; unset the token or update the plugin.
 - The login form wraps `connection.authorizeIndex` and reads `browserAuth.isAuthenticated`. If a future dsh version removes either, the form is skipped and the bare URL answers the stock plain `401`; the rest of the plugin keeps working.
+- Browser notifications need the client module system plus `ctx.uiSession.sessionStatus` and `ctx.sessions`; if a future dsh version drops either, the client half stays inert while the Host half keeps working. The page must stay open for notifications; there is no service worker or push subscription.
 - The pin runs once at startup. A host-plugin reload (HMR) can rebuild the Connection service from dsh's cached per-process token and will not reprint the startup URL; restart `dsh web` after changing the token or the dsh version.
 
 ## Development

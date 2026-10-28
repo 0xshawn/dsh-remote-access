@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — 2026-10-28
+
+Browser notifications.
+
+- Add a `dsh.client` browser half (hand-written bundle, no build step) that
+  raises Web Notifications when a top-level Session stops running, or when a
+  session starts waiting for approval, plan review, or an answer.
+- Notifications fire only while the page is hidden or unfocused and after the
+  browser grants permission; the page asks once on the first click or keypress.
+  Subagent and removed sessions are skipped, and clicking a notification
+  focuses the dsh window.
+- Add the `notifications` host config (default on) and inject
+  `__DSH_REMOTE_ACCESS_NOTIFY__` for the client half.
+- Limitations documented: page-based Web Notifications, no Web Push, page must
+  stay open, requires a secure context, and titles appear in OS notifications.
+
 ## 0.2.0 — 2026-10-27
 
 First-login form.
