@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.1 — 2026-10-29
+
+Failure notifications.
+
+- Listen to the forwarded `api-session/error` event and pair it with the
+  following running-to-idle transition, so a failed model call or aborted turn
+  raises `Task failed: <title>` with the first line of the error instead of a
+  generic completion notification.
+- Stale errors (older than 15 seconds) fall back to the completion copy.
+- Document the covered interactions: approval, user questions, and plan review
+  are registered pending domains; any future `uiSession` pending domain gets the
+  generic `Input needed` notification.
+
 ## 0.3.0 — 2026-10-28
 
 Browser notifications.

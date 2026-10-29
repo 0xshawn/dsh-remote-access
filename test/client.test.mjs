@@ -94,12 +94,21 @@ function fakeContext(sessions = {}) {
       }
     },
   }
+  const remoteHandlers = new Map()
   return {
     ctx: {
       uiSession: { sessionStatus: source },
       sessions: {
         list: {
           getSnapshot: () => ({ byId: sessions }),
+        },
+      },
+      remote: {
+        $on(key, listener) {
+          remoteHandlers.set(key, listener)
+          return () => {
+            remoteHandlers.delete(key)
+          }
         },
       },
       effect(callback) {
@@ -113,6 +122,7 @@ function fakeContext(sessions = {}) {
       for (const listener of [...listeners]) listener()
     },
     listeners,
+    remoteHandlers,
   }
 }
 
@@ -133,7 +143,7 @@ function sessionContext(rows) {
 test('client bundle exports the Cordis plugin shape', async () => {
   const client = await loadClientBundle()
   assert.equal(client.name, 'dsh-remote-access-notifications')
-  assert.deepEqual(client.inject, ['sessions', 'uiSession'])
+  assert.deepEqual(client.inject, ['remote', 'sessions', 'uiSession'])
   assert.equal(typeof client.apply, 'function')
   assert.equal(typeof client.__test.handleStatusChange, 'function')
 })
@@ -158,6 +168,36 @@ test('a finished non-subagent session emits one completion notification', async 
   assert.equal(sent.length, 1)
   assert.match(sent[0].title, /Task finished: Fix the deploy/u)
   assert.match(sent[0].tag, /s1:complete/u)
+})
+
+test('an agent error replaces the completion notification and keeps the detail', async () => {
+  const client = await loadClientBundle()
+  const sent = []
+  const sessions = { s1: row('Broken model') }
+  const errors = new Map()
+  client.__test.recordAgentError(errors, 's1', 'DeepSeek request failed: 401 Unauthorized', 1000)
+  const previous = new Map([['s1', { running: true, pendingInteraction: undefined }]])
+  const next = new Map([['s1', { running: false, pendingInteraction: undefined }]])
+  client.__test.handleStatusChange(previous, next, sessionContext(sessions), (message) => sent.push(message), errors, 1000)
+  assert.equal(sent.length, 1)
+  assert.match(sent[0].title, /Task failed: Broken model/u)
+  assert.match(sent[0].body, /401 Unauthorized/u)
+  assert.match(sent[0].tag, /s1:error/u)
+  assert.equal(errors.size, 0)
+})
+
+test('a stale agent error falls back to a completion notification', async () => {
+  const client = await loadClientBundle()
+  const sent = []
+  const sessions = { s1: row('Old failure') }
+  const errors = new Map()
+  client.__test.recordAgentError(errors, 's1', 'old failure', 1000)
+  const previous = new Map([['s1', { running: true, pendingInteraction: undefined }]])
+  const next = new Map([['s1', { running: false, pendingInteraction: undefined }]])
+  client.__test.handleStatusChange(previous, next, sessionContext(sessions), (message) => sent.push(message), errors, 30000)
+  assert.equal(sent.length, 1)
+  assert.match(sent[0].title, /Task finished: Old failure/u)
+  assert.equal(errors.size, 0)
 })
 
 test('subagent and removed sessions are skipped', async () => {
@@ -258,8 +298,8 @@ test('apply subscribes to sessionStatus and notifies on completion', async () =>
     fixture.push(new Map([['s1', { running: false, pendingInteraction: undefined }]]))
     assert.equal(FakeNotification.sent.length, 1)
     assert.match(FakeNotification.sent[0].title, /Task finished: Background task/u)
-    assert.equal(fixture.ctx.disposers.length, 1)
-    fixture.ctx.disposers[0]()
+    assert.equal(fixture.ctx.disposers.length, 2)
+    fixture.ctx.disposers.forEach((dispose) => dispose?.())
   } finally {
     browser.restore()
   }
@@ -275,6 +315,27 @@ test('permission is requested once on the first gesture', async () => {
     browser.listeners.get('pointerdown')()
     browser.listeners.get('keydown')?.()
     assert.equal(FakeNotification.requests, 1)
+  } finally {
+    browser.restore()
+  }
+})
+
+test('apply forwards api-session/error into a failure notification', async () => {
+  const client = await loadClientBundle()
+  FakeNotification.reset('granted')
+  const browser = installBrowser()
+  try {
+    const fixture = fakeContext({ s1: row('Broken task') })
+    client.apply(fixture.ctx)
+    const onError = fixture.remoteHandlers.get('api-session/error')
+    assert.equal(typeof onError, 'function')
+    fixture.push(new Map([['s1', { running: true, pendingInteraction: undefined }]]))
+    onError('s1', 'connection reset by peer')
+    fixture.push(new Map([['s1', { running: false, pendingInteraction: undefined }]]))
+    assert.equal(FakeNotification.sent.length, 1)
+    assert.match(FakeNotification.sent[0].title, /Task failed: Broken task/u)
+    assert.match(FakeNotification.sent[0].options.body, /connection reset by peer/u)
+    fixture.ctx.disposers.forEach((dispose) => dispose?.())
   } finally {
     browser.restore()
   }
