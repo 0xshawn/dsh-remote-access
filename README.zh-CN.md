@@ -108,7 +108,10 @@ dsh web --host 127.0.0.1 --port 3080 --no-open
 bundle 还带一个手写、无需构建的浏览器客户端：监听 Session 状态源，在以下情况发浏览器通知：
 
 - 顶层会话从运行中变为空闲 —— `任务完成：<标题>`；
+- 同一次空闲转变前有 Host agent 错误 —— `任务失败：<标题>`，正文取错误首行；
 - 会话开始等待批准、计划确认或回答 —— `需要批准` / `需要确认计划` / `需要你的输入`。
+
+失败信息来自转发的 `api-session/error` 事件，并与随后的空闲转变配对，因此模型调用失败、回合中止或工具循环报错会显示失败原因，而不是笼统的“任务完成”。任何通过 `uiSession` 注册的待处理交互都会触发通知；当前 dsh 版本注册的是批准和用户提问（含计划确认），未来未知的交互类型会回退到通用的 `需要你的输入` 文案。
 
 只有页面不可见或窗口失去焦点时才通知，且必须先获得浏览器的通知权限。页面会在第一次点击/按键时请求一次权限（按来源授权）。点击通知会把 dsh 窗口切到前台。子代理会话和已移除会话会被跳过。插件配置 `notifications: false` 可关闭客户端半边。
 
@@ -130,7 +133,7 @@ bundle 还带一个手写、无需构建的浏览器客户端：监听 Session �
 4. **登录表单 —— index 授权。** 插件包装 `connection.authorizeIndex`：`dsh-host-frontend-static` 在返回 index 前调用它。来自受信任权威、未认证的 GET index 请求得到令牌表单（内容为 HTML 的 `401`）；已认证、携带有效令牌、来自不受信任权威或非 GET 的请求都交回上游实现。插件卸载时恢复原方法。若未来 dsh 移除该方法，表单会静默禁用，裸地址恢复上游纯文本 `401`，其余功能不受影响。
 
 
-5. **通知 —— 客户端插件。** `package.json` 声明 `dsh.client`（`platform: web`）并导出 `./client`；`dsh-client-modules` 把浏览器 bundle 发给页面。客户端通过 `sessions` 与 `uiSession` 服务订阅 `ctx.uiSession.sessionStatus`，在本地发 Web Notification；宿主侧只注入 `config.notifications` 对应的 `__DSH_REMOTE_ACCESS_NOTIFY__` 开关。
+5. **通知 —— 客户端插件。** `package.json` 声明 `dsh.client`（`platform: web`）并导出 `./client`；`dsh-client-modules` 把浏览器 bundle 发给页面。客户端通过 `sessions` 与 `uiSession` 服务订阅 `ctx.uiSession.sessionStatus`，在本地发 Web Notification；`ctx.remote.$on('api-session/error')` 为下一次空闲转变提供失败详情。宿主侧只注入 `config.notifications` 对应的 `__DSH_REMOTE_ACCESS_NOTIFY__` 开关。
 ## 安全说明
 
 - **启动令牌就是凭据。** 持有打印出来的 `?token=` URL 即可换取会话 Cookie 并获得完整 owner 权限。请谨慎分发；固定令牌是长期凭据，绝不能提交到仓库。修改 `DSH_WEB_TOKEN` 并重启只会让旧 URL 失效，**不会**吊销已经签发的 Cookie（默认有效期 `cookieMaxAgeDays` 为 30 天）；要真正吊销，请清除该站点的 Cookie，或删除 browser-session 凭据记录后重启。

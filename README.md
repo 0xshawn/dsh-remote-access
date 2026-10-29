@@ -120,8 +120,17 @@ The bundle also ships a browser client half (plain hand-written bundle, no build
 step). It watches the Session status source and raises a Web Notification when:
 
 - a top-level session transitions from running to idle — `Task finished: <title>`;
+- the same transition carries a recent Host agent error — `Task failed: <title>`,
+  with the first line of the error as the body;
 - a session starts waiting for approval, plan review, or an answer —
   `Approval needed` / `Plan review needed` / `Input needed`.
+
+Failures are read from the forwarded `api-session/error` event and paired with
+the following idle transition, so a failed model call, aborted turn, or tool
+loop reports the failure instead of a generic completion. Any pending
+interaction registered through `uiSession` gets a notification; the current dsh
+build registers approval and user questions (including plan review), and an
+unknown future domain falls back to the generic `Input needed` copy.
 
 Notifications appear only while the page is hidden or the window is unfocused,
 and only after the browser grants notification permission. The page asks once on
@@ -156,8 +165,9 @@ The package is a dsh **bundle**: `cordis.patch.yml` is a patch layer over `@deep
    `platform: web` and exports `./client`; `dsh-client-modules` serves the
    browser bundle to the page. The client subscribes to
    `ctx.uiSession.sessionStatus` through the `sessions` and `uiSession`
-   services and raises local Web Notifications; the Host only injects the
-   `__DSH_REMOTE_ACCESS_NOTIFY__` feature flag from `config.notifications`.
+   services and raises local Web Notifications; `ctx.remote.$on('api-session/error')`
+   supplies failure details for the next idle transition. The Host only injects
+   the `__DSH_REMOTE_ACCESS_NOTIFY__` feature flag from `config.notifications`.
 
 ## Security
 
