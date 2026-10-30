@@ -229,17 +229,15 @@ test('a team subagent row is skipped by origin/depth without parentSessionId', a
   assert.deepEqual(sent, [])
 })
 
-test('the main session does not notify completion or failure', async () => {
+test('a main-view session still emits for the background visibility gate', async () => {
   const client = await loadClientBundle()
   const sent = []
   const sessions = { s1: row('Current task', { retainedBy: { mainView: 1 } }) }
   const previous = new Map([['s1', { running: true, pendingInteraction: undefined }]])
   const next = new Map([['s1', { running: false, pendingInteraction: undefined }]])
   client.__test.handleStatusChange(previous, next, sessionContext(sessions), (message) => sent.push(message))
-  const errors = new Map()
-  client.__test.recordAgentError(errors, 's1', 'boom', 1000)
-  client.__test.handleStatusChange(previous, next, sessionContext(sessions), (message) => sent.push(message), errors, 1000)
-  assert.deepEqual(sent, [])
+  assert.equal(sent.length, 1)
+  assert.match(sent[0].title, /Task finished: Current task/u)
 })
 
 test('a subagent absent from the session list is still skipped', async () => {

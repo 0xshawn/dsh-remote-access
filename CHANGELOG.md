@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.6 — 2026-10-31
+
+Restore background completion notifications.
+
+- Remove the unconditional main-view suppression from 0.3.4: it also
+  suppressed a main Session's completion while the page was hidden, causing a
+  real finished task to notify nothing. The existing visibility/focus gate
+  still keeps active-page completions silent; pending interactions still notify.
+- Subagent/unlisted filtering, the 3s settle delay, and failure details remain.
+
 ## 0.3.5 — 2026-10-30
 
 Hardened subagent filter.
