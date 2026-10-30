@@ -130,12 +130,13 @@ function row(title, extra = {}) {
   return { title, ...extra }
 }
 
-function sessionContext(rows) {
+function sessionContext(rows, subagentIds = []) {
   return {
     sessions: {
       list: {
         getSnapshot: () => ({ byId: rows }),
       },
+      subagentAddress: (sessionId) => (subagentIds.includes(sessionId) ? { kind: 'subagent', sessionId } : undefined),
     },
   }
 }
@@ -200,7 +201,21 @@ test('a stale agent error falls back to a completion notification', async () => 
   assert.equal(errors.size, 0)
 })
 
-test('subagent and removed sessions are skipped', async () => {
+test('a subagent absent from the session list is still skipped', async () => {
+  const client = await loadClientBundle()
+  const sent = []
+  const previous = new Map([['child', { running: true, pendingInteraction: undefined }]])
+  const next = new Map([['child', { running: false, pendingInteraction: undefined }]])
+  client.__test.handleStatusChange(
+    previous,
+    next,
+    sessionContext({}, ['child']),
+    (message) => sent.push(message),
+  )
+  assert.deepEqual(sent, [])
+})
+
+test('listed subagent and removed sessions are skipped', async () => {
   const client = await loadClientBundle()
   const sent = []
   const sessions = {
