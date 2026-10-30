@@ -136,7 +136,15 @@ A background Session's completion or failure notifies even while the page is
 focused. The Session currently open in the page notifies only while the page is
 hidden or the window is unfocused; pending-interaction notifications are not
 gated by the main view. A notification is held for three seconds after a
-background Session goes idle. If a retry, queued continuation, or new pending input resumes
+background Session goes idle.
+
+Tabs coordinate through local storage: a focused tab publishes the Session it
+shows, other tabs suppress notifications for that Session, and one tab claims
+each event so hidden tabs do not duplicate it. The client also fetches the
+served boot manifest every 15 seconds and reloads itself when the plugin bundle
+revision changes, so an open page cannot keep running stale notification code
+after a hot update (the first release with this check still needs one manual
+refresh). If a retry, queued continuation, or new pending input resumes
 the session in that window, the notification is cancelled; this keeps transient
 failures that immediately retry from producing an invalid notification.
 
