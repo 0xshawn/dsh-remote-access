@@ -201,6 +201,19 @@ test('a stale agent error falls back to a completion notification', async () => 
   assert.equal(errors.size, 0)
 })
 
+test('the main session does not notify completion or failure', async () => {
+  const client = await loadClientBundle()
+  const sent = []
+  const sessions = { s1: row('Current task', { retainedBy: { mainView: 1 } }) }
+  const previous = new Map([['s1', { running: true, pendingInteraction: undefined }]])
+  const next = new Map([['s1', { running: false, pendingInteraction: undefined }]])
+  client.__test.handleStatusChange(previous, next, sessionContext(sessions), (message) => sent.push(message))
+  const errors = new Map()
+  client.__test.recordAgentError(errors, 's1', 'boom', 1000)
+  client.__test.handleStatusChange(previous, next, sessionContext(sessions), (message) => sent.push(message), errors, 1000)
+  assert.deepEqual(sent, [])
+})
+
 test('a subagent absent from the session list is still skipped', async () => {
   const client = await loadClientBundle()
   const sent = []
