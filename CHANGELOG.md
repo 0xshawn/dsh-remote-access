@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.3 — 2026-10-30
+
+Settled-notification delay.
+
+- Hold completion and failure notifications for three seconds after a session
+  goes idle. Cancel the pending notification when a retry, queued continuation,
+  or new pending interaction resumes the session, so transient failures that
+  immediately retry do not produce an invalid notification.
+- Pending-interaction notifications stay immediate; they are never delayed.
+- Includes the 0.3.2 subagent filter (`ctx.sessions.subagentAddress`) so
+  subagent completions and failures never notify.
+
 ## 0.3.2 — 2026-10-30
 
 Subagent notification filter.
