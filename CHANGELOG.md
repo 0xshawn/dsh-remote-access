@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 — 2026-10-30
+
+Subagent notification filter.
+
+- Detect subagents with `ctx.sessions.subagentAddress()` before consulting the
+  session-list row, so a subagent absent from the main list no longer raises a
+  notification for its completion or failure. The row-parent check remains as a
+  fallback for older service layouts.
+- Subagent and removed sessions are documented as skipped; no other notification
+  behavior changes.
+
 ## 0.3.1 — 2026-10-29
 
 Failure notifications.
