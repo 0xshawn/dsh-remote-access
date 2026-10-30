@@ -302,7 +302,8 @@ test('announce respects the browser permission', async () => {
   }
 })
 
-test('apply subscribes to sessionStatus and notifies on completion', async () => {
+test('apply subscribes to sessionStatus and notifies after the idle settle delay', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
   const client = await loadClientBundle()
   FakeNotification.reset('granted')
   const browser = installBrowser()
@@ -311,6 +312,8 @@ test('apply subscribes to sessionStatus and notifies on completion', async () =>
     client.apply(fixture.ctx)
     fixture.push(new Map([['s1', { running: true, pendingInteraction: undefined }]]))
     fixture.push(new Map([['s1', { running: false, pendingInteraction: undefined }]]))
+    assert.equal(FakeNotification.sent.length, 0)
+    t.mock.timers.tick(client.__test.SETTLE_MS)
     assert.equal(FakeNotification.sent.length, 1)
     assert.match(FakeNotification.sent[0].title, /Task finished: Background task/u)
     assert.equal(fixture.ctx.disposers.length, 2)
@@ -335,7 +338,8 @@ test('permission is requested once on the first gesture', async () => {
   }
 })
 
-test('apply forwards api-session/error into a failure notification', async () => {
+test('apply forwards api-session/error into a failure notification', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
   const client = await loadClientBundle()
   FakeNotification.reset('granted')
   const browser = installBrowser()
@@ -347,9 +351,29 @@ test('apply forwards api-session/error into a failure notification', async () =>
     fixture.push(new Map([['s1', { running: true, pendingInteraction: undefined }]]))
     onError('s1', 'connection reset by peer')
     fixture.push(new Map([['s1', { running: false, pendingInteraction: undefined }]]))
+    t.mock.timers.tick(client.__test.SETTLE_MS)
     assert.equal(FakeNotification.sent.length, 1)
     assert.match(FakeNotification.sent[0].title, /Task failed: Broken task/u)
     assert.match(FakeNotification.sent[0].options.body, /connection reset by peer/u)
+    fixture.ctx.disposers.forEach((dispose) => dispose?.())
+  } finally {
+    browser.restore()
+  }
+})
+
+test('a quick retry cancels the pending notification', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const client = await loadClientBundle()
+  FakeNotification.reset('granted')
+  const browser = installBrowser()
+  try {
+    const fixture = fakeContext({ s1: row('Retrying task') })
+    client.apply(fixture.ctx)
+    fixture.push(new Map([['s1', { running: true, pendingInteraction: undefined }]]))
+    fixture.push(new Map([['s1', { running: false, pendingInteraction: undefined }]]))
+    fixture.push(new Map([['s1', { running: true, pendingInteraction: undefined }]]))
+    t.mock.timers.tick(client.__test.SETTLE_MS)
+    assert.equal(FakeNotification.sent.length, 0)
     fixture.ctx.disposers.forEach((dispose) => dispose?.())
   } finally {
     browser.restore()

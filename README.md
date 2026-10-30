@@ -132,6 +132,11 @@ interaction registered through `uiSession` gets a notification; the current dsh
 build registers approval and user questions (including plan review), and an
 unknown future domain falls back to the generic `Input needed` copy.
 
+A completion or failure notification is held for three seconds after the
+session goes idle. If a retry, queued continuation, or new pending input resumes
+the session in that window, the notification is cancelled; this keeps transient
+failures that immediately retry from producing an invalid notification.
+
 Notifications appear only while the page is hidden or the window is unfocused,
 and only after the browser grants notification permission. The page asks once on
 the first click or keypress; grant it for the deployment origin. Clicking a
