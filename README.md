@@ -143,8 +143,9 @@ Notifications appear only while the page is hidden or the window is unfocused,
 and only after the browser grants notification permission. The page asks once on
 the first click or keypress; grant it for the deployment origin. Clicking a
 notification brings the dsh window back to the foreground. Subagent and removed
-sessions are skipped. Set `notifications: false` in the plugin config to turn
-the client half off.
+sessions are skipped, and an unknown or not-yet-listed Session is never guessed
+into a notification. Set `notifications: false` in the plugin config to turn the
+client half off.
 
 Limitations: this uses page Web Notifications, not Web Push. The dsh page must
 stay open in a tab (it may be backgrounded); a fully closed browser receives
