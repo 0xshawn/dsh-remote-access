@@ -55,8 +55,10 @@ function installBrowser(overrides = {}) {
   const previous = {
     Notification: globalThis.Notification,
     document: globalThis.document,
+    localStorage: globalThis.localStorage,
     config: globalThis.__DSH_REMOTE_ACCESS_NOTIFY__,
   }
+  const store = new Map()
   const listeners = new Map()
   const document = {
     visibilityState: overrides.visibilityState ?? 'hidden',
@@ -67,6 +69,11 @@ function installBrowser(overrides = {}) {
   }
   globalThis.Notification = FakeNotification
   globalThis.document = document
+  globalThis.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+    removeItem: (key) => store.delete(key),
+  }
   delete globalThis.__DSH_REMOTE_ACCESS_NOTIFY__
   if (overrides.config !== undefined) globalThis.__DSH_REMOTE_ACCESS_NOTIFY__ = overrides.config
   return {
@@ -75,6 +82,8 @@ function installBrowser(overrides = {}) {
     restore() {
       globalThis.Notification = previous.Notification
       globalThis.document = previous.document
+      if (previous.localStorage === undefined) delete globalThis.localStorage
+      else globalThis.localStorage = previous.localStorage
       if (previous.config === undefined) delete globalThis.__DSH_REMOTE_ACCESS_NOTIFY__
       else globalThis.__DSH_REMOTE_ACCESS_NOTIFY__ = previous.config
     },
@@ -369,7 +378,7 @@ test('apply subscribes to sessionStatus and notifies after the idle settle delay
     t.mock.timers.tick(client.__test.SETTLE_MS)
     assert.equal(FakeNotification.sent.length, 1)
     assert.match(FakeNotification.sent[0].title, /Task finished: Background task/u)
-    assert.equal(fixture.ctx.disposers.length, 2)
+    assert.equal(fixture.ctx.disposers.length, 3)
     fixture.ctx.disposers.forEach((dispose) => dispose?.())
   } finally {
     browser.restore()
@@ -428,6 +437,62 @@ test('a quick retry cancels the pending notification', async (t) => {
     t.mock.timers.tick(client.__test.SETTLE_MS)
     assert.equal(FakeNotification.sent.length, 0)
     fixture.ctx.disposers.forEach((dispose) => dispose?.())
+  } finally {
+    browser.restore()
+  }
+})
+
+test('the boot manifest revision is parsed for the stale-page check', async () => {
+  const client = await loadClientBundle()
+  const html = '<script>globalThis["__DSH_BOOT__"] = {"rev":"boot","entries":[{"id":"other","rev":"x"},{"id":"dsh-remote-access","rev":"plugin-rev"}]}</script>'
+  assert.equal(client.__test.parseBootRev(html), 'plugin-rev')
+  assert.equal(client.__test.parseBootRev('<html></html>'), undefined)
+  assert.equal(client.__test.bootEntryRev({ entries: [{ id: 'dsh-remote-access', rev: 'r' }] }), 'r')
+})
+
+test('another focused tab viewing the session suppresses the notification', async () => {
+  const client = await loadClientBundle()
+  const browser = installBrowser({ visibilityState: 'visible', focused: true })
+  try {
+    globalThis.localStorage.setItem('dsh-remote-access:viewing', JSON.stringify({
+      pageId: 'other-tab',
+      sessionId: 's1',
+      focused: true,
+      at: Date.now(),
+    }))
+    assert.equal(client.__test.anotherPageViewing('s1'), true)
+    assert.equal(client.__test.anotherPageViewing('s2'), false)
+  } finally {
+    browser.restore()
+  }
+})
+
+test('one tab claims a notification event so hidden tabs do not duplicate it', async () => {
+  const client = await loadClientBundle()
+  const browser = installBrowser()
+  try {
+    assert.equal(client.__test.claimNotification('s1', 'complete'), true)
+    globalThis.localStorage.setItem(
+      'dsh-remote-access:claim:s1:complete',
+      JSON.stringify({ pageId: 'other-tab', at: Date.now() }),
+    )
+    assert.equal(client.__test.claimNotification('s1', 'complete'), false)
+    assert.equal(client.__test.claimNotification('s1', 'error'), true)
+  } finally {
+    browser.restore()
+  }
+})
+
+test('syncViewing publishes the focused main session and currentMainSessionId finds it', async () => {
+  const client = await loadClientBundle()
+  const browser = installBrowser({ visibilityState: 'visible', focused: true })
+  try {
+    const context = sessionContext({ s1: row('Main', { retainedBy: { mainView: 1 } }) })
+    assert.equal(client.__test.currentMainSessionId(context.sessions), 's1')
+    client.__test.syncViewing(context.sessions)
+    const record = JSON.parse(globalThis.localStorage.getItem('dsh-remote-access:viewing'))
+    assert.equal(record.sessionId, 's1')
+    assert.equal(record.focused, true)
   } finally {
     browser.restore()
   }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.8 — 2026-10-31
+
+Multi-tab coordination and stale-page reload.
+
+- A focused tab publishes its main Session in local storage; other tabs suppress
+  notifications for that Session, and a per-event claim prevents hidden tabs from
+  duplicating the same notification.
+- Poll the served boot manifest every 15 seconds and reload the page when the
+  `dsh-remote-access` bundle revision changes, so an open page stops running old
+  notification code after a hot update. The first release with this check still
+  needs one manual refresh to install it.
+- Keep the per-session notification rules: background Sessions notify even when
+  the page is focused; the main Session notifies only while hidden/unfocused.
+
 ## 0.3.7 — 2026-10-31
 
 Background-session notifications while the page is focused.
