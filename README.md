@@ -132,11 +132,11 @@ interaction registered through `uiSession` gets a notification; the current dsh
 build registers approval and user questions (including plan review), and an
 unknown future domain falls back to the generic `Input needed` copy.
 
-Completion and failure notifications for every Session, including the one
-currently open in the page, are emitted only while the page is hidden or the
-window is unfocused. Pending-interaction notifications fire even for the main
-view. A notification is held for three seconds after a background Session goes
-idle. If a retry, queued continuation, or new pending input resumes
+A background Session's completion or failure notifies even while the page is
+focused. The Session currently open in the page notifies only while the page is
+hidden or the window is unfocused; pending-interaction notifications are not
+gated by the main view. A notification is held for three seconds after a
+background Session goes idle. If a retry, queued continuation, or new pending input resumes
 the session in that window, the notification is cancelled; this keeps transient
 failures that immediately retry from producing an invalid notification.
 

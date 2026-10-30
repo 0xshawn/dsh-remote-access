@@ -315,12 +315,26 @@ test('a session that finishes after answering does notify completion', async () 
   assert.match(sent[0].title, /Task finished: Demo/u)
 })
 
-test('nothing is announced while the page is visible and focused', async () => {
+test('the main session is silent while visible but a background session notifies', async () => {
   const client = await loadClientBundle()
   const browser = installBrowser({ visibilityState: 'visible', focused: true })
   try {
-    assert.equal(client.__test.announce({ title: 'Hidden', body: 'Body' }), undefined)
+    assert.equal(client.__test.announce({ title: 'Main', body: 'Body', mainSession: true }), undefined)
     assert.equal(FakeNotification.sent.length, 0)
+    const sent = client.__test.announce({ title: 'Background', body: 'Body', mainSession: false })
+    assert.equal(sent.title, 'Background')
+    assert.equal(FakeNotification.sent.length, 1)
+  } finally {
+    browser.restore()
+  }
+})
+
+test('the main session notifies once the page is hidden', async () => {
+  const client = await loadClientBundle()
+  const browser = installBrowser({ visibilityState: 'hidden', focused: false })
+  try {
+    const sent = client.__test.announce({ title: 'Main hidden', body: 'Body', mainSession: true })
+    assert.equal(sent.title, 'Main hidden')
   } finally {
     browser.restore()
   }
