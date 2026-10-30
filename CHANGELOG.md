@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4 — 2026-10-30
+
+Main-session notification filter.
+
+- Skip completion and failure notifications for the Session currently open in
+  the page (its list row has `retainedBy.mainView`), because the user can already
+  see that state. Pending approval/question notifications still fire.
+- This removes the invalid completion notice after a user aborts the turn in the
+  Session they are viewing.
+
 ## 0.3.3 — 2026-10-30
 
 Settled-notification delay.
