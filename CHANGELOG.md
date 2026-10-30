@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.5 — 2026-10-30
+
+Hardened subagent filter.
+
+- Diagnosed a remaining subagent notification: a team subagent's client list row
+  can omit `parentSessionId`, and the Session can be unlisted, so the previous
+  label fallback emitted a notification named "Session".
+- Check `ctx.sessions.subagentAddress` independently from the row lookup, skip
+  `origin: subagent` and `depth > 0` rows, and skip unknown/unlisted Sessions
+  instead of guessing a label.
+- Includes the 0.3.4 main-view suppression.
+
 ## 0.3.4 — 2026-10-30
 
 Main-session notification filter.

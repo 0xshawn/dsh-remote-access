@@ -201,6 +201,34 @@ test('a stale agent error falls back to a completion notification', async () => 
   assert.equal(errors.size, 0)
 })
 
+test('an unlisted session is not guessed into a notification', async () => {
+  const client = await loadClientBundle()
+  const sent = []
+  const previous = new Map([['missing', { running: true, pendingInteraction: undefined }]])
+  const next = new Map([['missing', { running: false, pendingInteraction: undefined }]])
+  client.__test.handleStatusChange(previous, next, sessionContext({}), (message) => sent.push(message))
+  assert.deepEqual(sent, [])
+})
+
+test('a team subagent row is skipped by origin/depth without parentSessionId', async () => {
+  const client = await loadClientBundle()
+  const sent = []
+  const sessions = {
+    team: row('Team reviewer', { origin: 'subagent' }),
+    child: row('Child row', { depth: 1 }),
+  }
+  const previous = new Map([
+    ['team', { running: true, pendingInteraction: undefined }],
+    ['child', { running: true, pendingInteraction: undefined }],
+  ])
+  const next = new Map([
+    ['team', { running: false, pendingInteraction: undefined }],
+    ['child', { running: false, pendingInteraction: undefined }],
+  ])
+  client.__test.handleStatusChange(previous, next, sessionContext(sessions), (message) => sent.push(message))
+  assert.deepEqual(sent, [])
+})
+
 test('the main session does not notify completion or failure', async () => {
   const client = await loadClientBundle()
   const sent = []
