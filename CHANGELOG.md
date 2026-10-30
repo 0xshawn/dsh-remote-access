@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.7 — 2026-10-31
+
+Background-session notifications while the page is focused.
+
+- A ts-dev task completed in a background Session while the page was focused;
+  the 0.3.6 page-level gate suppressed it. Completion/failure notices for
+  non-main Sessions now fire even when the page is focused; the Session open in
+  the page still waits for hidden/unfocused. Pending interactions are not gated.
+- Subagent/unlisted filtering, the 3s settle delay, and failure details remain.
+
 ## 0.3.6 — 2026-10-31
 
 Restore background completion notifications.

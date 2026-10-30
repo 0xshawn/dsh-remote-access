@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-access",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Serve the DeepSeek Harness Web UI through a non-localhost authority: declarative /api trusted hosts, loopback page parity, and a pinned launch token, without patching the installed dsh.",
   "keywords": [
     "dsh",
